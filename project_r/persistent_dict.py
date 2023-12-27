@@ -5,6 +5,24 @@ from io import TextIOBase
 from pathlib import Path
 from typing import Any
 
+__all__ = ["PersistentDict", "DatabaseClosedError"]
+
+
+class DatabaseClosedError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Database file object is closed.")
+
+
+def ensure_file_is_open(func):
+    async def wrapper(*args):
+        self = args[0]
+        if self._is_file_closed:
+            raise DatabaseClosedError()
+
+        return await func(*args)
+
+    return wrapper
+
 
 class PersistentDict:
     """
@@ -18,30 +36,30 @@ class PersistentDict:
         File can be a Path to a database file or a TextIOBase if you don't want to use a file,
         such as using a StringIO object for a memory database.
         """
-        self._file = file
-
         self._r = asyncio.Lock()
         self._g = asyncio.Lock()
         self._b = 0
 
-        with self._get_file_object() as file_object:
-            try:
-                self._data: dict = json.load(file_object)
-            except json.JSONDecodeError:
-                # File is not empty, database exists but failed to load
-                if file_object.read():
-                    raise Exception("Failed to load database.")
+        self._file: TextIOBase = self._get_file_object(file)
+        self._is_file_closed = False
 
-                # File is empty so it's a new database, make an empty dict
-                self._data: dict = {}
+        try:
+            self._data: dict = json.load(self._file)
+        except json.JSONDecodeError:
+            # File is not empty, database exists but failed to load
+            if self._file.read():
+                raise Exception("Failed to load database.")
 
-            assert type(self._data) is dict, "Database file is not a dictionary"
+            # File is empty so it's a new database, make an empty dict
+            self._data: dict = {}
 
-    def _get_file_object(self) -> TextIOBase:
-        if type(self._file) is Path:
-            return open(self._file, "r+" if self._file.is_file() else "w+")
-        elif isinstance(self._file, TextIOBase):
-            return self._file
+        assert type(self._data) is dict, "Database file is not a dictionary"
+
+    def _get_file_object(self, file) -> TextIOBase:
+        if type(file) is Path:
+            return open(file, "r+" if file.is_file() else "w+")
+        elif isinstance(file, TextIOBase):
+            return file
         else:
             raise Exception("Invalid file type")
 
@@ -65,6 +83,7 @@ class PersistentDict:
     async def _end_write(self):
         self._g.release()
 
+    @ensure_file_is_open
     async def get(self, key) -> Any:
         await self._begin_read()
 
@@ -74,27 +93,44 @@ class PersistentDict:
 
         return result
 
+    @ensure_file_is_open
     async def set(self, key, value):
         await self._begin_write()
 
         logging.debug(f"Persistent storage set {key} to {value}")
 
         self._data[key] = value
-        with self._get_file_object() as file_object:
-            file_object.truncate(0)
-            file_object.seek(0)
-            json.dump(self._data, file_object, sort_keys=True, indent=4)
+
+        self._file.truncate(0)
+        self._file.seek(0)
+        json.dump(self._data, self._file, sort_keys=True, indent=4)
+        self._file.flush()
 
         await self._end_write()
 
+    @ensure_file_is_open
     async def remove(self, key):
         await self._begin_write()
 
         logging.debug(f"Persistent storage removed {key}")
         self._data.pop(key)
-        with self._get_file_object() as file_object:
-            file_object.truncate(0)
-            file_object.seek(0)
-            json.dump(self._data, file_object, sort_keys=True, indent=4)
+
+        self._file.truncate(0)
+        self._file.seek(0)
+        json.dump(self._data, self._file, sort_keys=True, indent=4)
+        self._file.flush()
 
         await self._end_write()
+
+    def close(self):
+        if not self._file.closed:
+            self._file.close()
+            self._data = {}
+
+    def __del__(self):
+        """
+        Ensure the file is closed when the object is destroyed.
+
+        May have unexpected behaviour
+        """
+        self.close()
