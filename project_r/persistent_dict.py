@@ -14,7 +14,7 @@ class DatabaseClosedError(Exception):
         super().__init__("Database file object is closed.")
 
 
-def ensure_file_is_open(func):
+def _ensure_file_is_open(func):
     async def wrapper(*args):
         self = args[0]
         if self._is_file_closed:
@@ -60,13 +60,13 @@ class PersistentDict:
         else:
             raise Exception("Invalid file type")
 
-    @ensure_file_is_open
+    @_ensure_file_is_open
     async def get(self, key) -> Any:
         async with self._rwlock.reader_locked():
             result = self._data.get(key, None)
             return result
 
-    @ensure_file_is_open
+    @_ensure_file_is_open
     async def set(self, key, value):
         async with self._rwlock.writer_locked():
             logging.debug(f"Persistent storage set {key} to {value}")
@@ -78,7 +78,7 @@ class PersistentDict:
             json.dump(self._data, self._file, sort_keys=True, indent=4)
             self._file.flush()
 
-    @ensure_file_is_open
+    @_ensure_file_is_open
     async def remove(self, key):
         async with self._rwlock.writer_locked():
             logging.debug(f"Persistent storage removed {key}")
