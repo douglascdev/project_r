@@ -4,25 +4,10 @@ from io import TextIOBase
 from pathlib import Path
 from typing import Any
 
+from project_r.decorators import ensure_file_is_open
 from project_r.rwlock import RWLock
 
-__all__ = ["PersistentDict", "DatabaseClosedError"]
-
-
-class DatabaseClosedError(Exception):
-    def __init__(self) -> None:
-        super().__init__("Database file object is closed.")
-
-
-def _ensure_file_is_open(func):
-    async def wrapper(*args):
-        self = args[0]
-        if self._is_file_closed:
-            raise DatabaseClosedError()
-
-        return await func(*args)
-
-    return wrapper
+__all__ = ["PersistentDict"]
 
 
 class PersistentDict:
@@ -38,7 +23,6 @@ class PersistentDict:
 
         self._rwlock = RWLock()
         self._file: TextIOBase = self._get_file_object(file)
-        self._is_file_closed = False
 
         try:
             self._data: dict = json.load(self._file)
@@ -60,13 +44,13 @@ class PersistentDict:
         else:
             raise Exception("Invalid file type")
 
-    @_ensure_file_is_open
+    @ensure_file_is_open
     async def get(self, key) -> Any:
         async with self._rwlock.reader_locked():
             result = self._data.get(key, None)
             return result
 
-    @_ensure_file_is_open
+    @ensure_file_is_open
     async def set(self, key, value):
         async with self._rwlock.writer_locked():
             logging.debug(f"Persistent storage set {key} to {value}")
@@ -78,7 +62,7 @@ class PersistentDict:
             json.dump(self._data, self._file, sort_keys=True, indent=4)
             self._file.flush()
 
-    @_ensure_file_is_open
+    @ensure_file_is_open
     async def remove(self, key):
         async with self._rwlock.writer_locked():
             logging.debug(f"Persistent storage removed {key}")

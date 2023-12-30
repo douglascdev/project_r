@@ -1,0 +1,37 @@
+[project]
+name = "project_r"
+description = "Intuitive key-value persistence for Python applications"
+version = "0.1.0"
+authors = [
+    { name = "Douglas", email = "hashy.software@gmail.com" }
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 2 - Pre-Alpha",
+]
+readme = "README.md"
+dependencies = [
+
+]
+
+[tool.isort]
+profile = "black"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+"Homepage" = "https://github.com/douglascdev/project_r"
+
+# [project.scripts]
+# hasherino = "hasherino.__main__:run_hasherino"
+# 
+# [project.optional-dependencies]
+# dev = [
+#     "pyinstaller == 6.0.0",
+# ]
+
