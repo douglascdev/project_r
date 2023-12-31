@@ -21,47 +21,82 @@ class _ValueNode:
 
     @property
     def available_space(self) -> int:
-        return self.end_index - self.start_index
+        """
+        Returns the maximum space the node value can take.
+        """
+        return self.end_index - self.start_index + (1 if self.start_index == 0 else 0)
 
 
-class _DisabledNodes:
+class _DisabledNodesList:
     """
-    Uses binary search to find and insert nodes into the disabled node list.
+    Manages operations on the list of disabled nodes.
     """
 
     def __init__(self) -> None:
         self.disabled_nodes: list[_ValueNode] = []
 
-    def find_node(self, min_size: int) -> _ValueNode | None:
-        """
-        Finds a node with available space greater than or equal to min_size using binary search.
-        """
-        optimal_node_index = bisect_left(
+    def _bisect(self, min_size: int) -> int:
+        return bisect_left(
             self.disabled_nodes, min_size, key=lambda node: node.available_space
         )
-        if self.disabled_nodes[optimal_node_index].available_space >= min_size:
-            return self.disabled_nodes[optimal_node_index]
-        else:
+
+    def find_node(self, min_size: int) -> _ValueNode | None:
+        """
+        Finds a node with available space greater than or equal to min_size using binary search,
+        or returns None if no disabled node fits the min_size requirement.
+        """
+        optimal_node_index = self._bisect(min_size)
+
+        """
+        If bisect returned an index that is out of bounds, no disabled node fits
+        the min_size requirement and the caller will have to allocate a new node.
+        """
+        if optimal_node_index >= len(self.disabled_nodes):
             return None
+
+        return self.disabled_nodes[optimal_node_index]
 
     def insert(self, node: _ValueNode) -> None:
         insort_left(self.disabled_nodes, node, key=lambda n: n.available_space)
 
     def remove(self, node: _ValueNode) -> None:
-        self.disabled_nodes.remove(node)
+        """
+        Remove node from disabled nodes list or raise ValueError if node is not found.
+        """
+
+        """
+        Since nodes are sorted by available space, we can use binary search to
+        find the leftmost node that would have the same available space, then use
+        the next pointer to traverse the links until we find the correct node to remove.
+        """
+        initial_index = self._bisect(node.available_space)
+        num_nodes_traversed = 0
+
+        current_node = self.disabled_nodes[initial_index]
+        while (
+            current_node not in (None, node)
+            and current_node.available_space == node.available_space
+        ):
+            current_node = current_node.next_node
+            num_nodes_traversed += 1
+
+        if current_node is node:
+            self.disabled_nodes.pop(initial_index + num_nodes_traversed)
+        else:
+            raise ValueError(f"Node {node} not in disabled nodes.")
 
 
-@dataclass
 class _Metadata:
     """
     Metadata that is written to disk.
     """
 
-    file_size: int = 0
-    # Maps database keys to their corresponding database nodes
-    key_to_node: dict[str, _ValueNode] = {}
-    disabled_nodes: list[_ValueNode] = []
-    last_node: _ValueNode | None = None
+    def __init__(self) -> None:
+        self.file_size: int = 0
+        # Maps database keys to their corresponding database nodes
+        self.key_to_node: dict[str, _ValueNode] = {}
+        self.disabled_nodes: list[_ValueNode] = []
+        self.last_node: _ValueNode | None = None
 
     def toJSON(self) -> str:
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
@@ -85,6 +120,8 @@ class MetadataController:
 
         # TODO: load from json
         self._metadata = _Metadata()
+
+        self._disabled_nodes_list = _DisabledNodesList()
 
     def _add_new_node(self, key: str, value_size: int):
         """
