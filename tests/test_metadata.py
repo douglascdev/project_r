@@ -49,7 +49,7 @@ class TestMetadataDisabledNodes(unittest.IsolatedAsyncioTestCase):
             10: 5,
         }
         for node_size, expected_index in node_minsize_to_expected_index.items():
-            result = self.disabled_nodes_list.find_node(node_size)
+            i, result = self.disabled_nodes_list.find_node(node_size)
             expected_node = self.disabled_nodes_list.disabled_nodes[expected_index]
             self.assertEqual(
                 result,

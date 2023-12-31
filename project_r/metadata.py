@@ -40,10 +40,10 @@ class _DisabledNodesList:
             self.disabled_nodes, min_size, key=lambda node: node.available_space
         )
 
-    def find_node(self, min_size: int) -> _ValueNode | None:
+    def find_node(self, min_size: int) -> tuple[int, _ValueNode] | None:
         """
         Finds a node with available space greater than or equal to min_size using binary search,
-        or returns None if no disabled node fits the min_size requirement.
+        return its index and the node, or None if no disabled node fits the min_size requirement.
         """
         optimal_node_index = self._bisect(min_size)
 
@@ -54,7 +54,7 @@ class _DisabledNodesList:
         if optimal_node_index >= len(self.disabled_nodes):
             return None
 
-        return self.disabled_nodes[optimal_node_index]
+        return optimal_node_index, self.disabled_nodes[optimal_node_index]
 
     def insert(self, node: _ValueNode) -> None:
         insort_left(self.disabled_nodes, node, key=lambda n: n.available_space)
@@ -84,6 +84,9 @@ class _DisabledNodesList:
             self.disabled_nodes.pop(initial_index + num_nodes_traversed)
         else:
             raise ValueError(f"Node {node} not in disabled nodes.")
+
+    def pop(self, index: int) -> _ValueNode:
+        return self.disabled_nodes.pop(index)
 
 
 class _Metadata:
@@ -124,11 +127,19 @@ class MetadataController:
         self._disabled_nodes_list = _DisabledNodesList()
 
     def _add_new_node(self, key: str, value_size: int):
-        """
-        TODO:
-         - try allocating on a disabled node that fits the value size
-        """
-        if self._metadata.last_node is None:
+        # Try allocating in a disabled node that fits the value size
+        # TODO: if the disabled node has more space than needed, split it in two,
+        #       creating a new disabled node with the remaining space
+        index_and_node = self._disabled_nodes_list.find_node(min_size=value_size)
+        if index_and_node is not None:
+            index, node = index_and_node
+            self._disabled_nodes_list.pop(index)
+            self._metadata.key_to_node[key] = node
+            node.value_size = value_size
+            node.is_enabled = True
+
+        elif self._metadata.last_node is None:
+            # First node
             self.last_node = _ValueNode(
                 start_index=0,
                 end_index=value_size,
@@ -147,13 +158,15 @@ class MetadataController:
                 next_node=None,
             )
             self._metadata.last_node.next_node = node
+            node.previous_node = self._metadata.last_node
             self._metadata.last_node = node
             self._metadata.file_size += value_size
             self._metadata.key_to_node[key] = self.last_node
 
     def _disable_node(self, node: _ValueNode):
         """
-        Disables node and tries to find a sequence of previous disabled nodes that can be combined to free more space.
+        Disable node and try to traverse the list of disabled nodes to its left and right,
+        turning the sequence of disabled nodes into a new single node.
         """
         node.is_enabled = False
         # TODO
