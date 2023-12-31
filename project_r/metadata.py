@@ -169,7 +169,8 @@ class MetadataController:
         turning the sequence of disabled nodes into a new single node.
         """
         node.is_enabled = False
-        # TODO
+        self._disabled_nodes_list.insert(node)
+        # TODO traversal
 
     def set(self, key: str, value_size: int) -> tuple[int, int]:
         if key in self._metadata.key_to_node:
@@ -201,4 +202,3 @@ class MetadataController:
     def remove(self, key: str) -> None:
         node = self._metadata.key_to_node.pop(key)
         self._disable_node(node)
-        # TODO: add node to disabled node map
