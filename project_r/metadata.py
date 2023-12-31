@@ -1,4 +1,5 @@
 import json
+from bisect import bisect_left, insort_left
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -23,6 +24,33 @@ class _ValueNode:
         return self.end_index - self.start_index
 
 
+class _DisabledNodes:
+    """
+    Uses binary search to find and insert nodes into the disabled node list.
+    """
+
+    def __init__(self) -> None:
+        self.disabled_nodes: list[_ValueNode] = []
+
+    def find_node(self, min_size: int) -> _ValueNode | None:
+        """
+        Finds a node with available space greater than or equal to min_size using binary search.
+        """
+        optimal_node_index = bisect_left(
+            self.disabled_nodes, min_size, key=lambda node: node.available_space
+        )
+        if self.disabled_nodes[optimal_node_index].available_space >= min_size:
+            return self.disabled_nodes[optimal_node_index]
+        else:
+            return None
+
+    def insert(self, node: _ValueNode) -> None:
+        insort_left(self.disabled_nodes, node, key=lambda n: n.available_space)
+
+    def remove(self, node: _ValueNode) -> None:
+        self.disabled_nodes.remove(node)
+
+
 @dataclass
 class _Metadata:
     """
@@ -32,6 +60,7 @@ class _Metadata:
     file_size: int = 0
     # Maps database keys to their corresponding database nodes
     key_to_node: dict[str, _ValueNode] = {}
+    disabled_nodes: list[_ValueNode] = []
     last_node: _ValueNode | None = None
 
     def toJSON(self) -> str:
