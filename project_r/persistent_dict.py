@@ -19,6 +19,9 @@ class PersistentDict:
         """
         File can be a Path to a database file or a TextIOBase if you don't want to use a file,
         such as using a StringIO object for a memory database.
+
+        A metadata json file will be created automatically in the same directory with the same
+        name, but removing the extension and appending "_metadata.json".
         """
 
         self._rwlock = RWLock()
