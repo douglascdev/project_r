@@ -7,14 +7,8 @@ from pathlib import Path
 @dataclass
 class _ValueNode:
     """
-    Starting and ending byte index of a value in the database file.
-
-    start_index: int
-    end_index: int
-    value_size: int
-    previous_node: "None | _ValueNode"
-    next_node: "None | _ValueNode"
-    is_in_use: bool = True
+    Keeps all information about a node stored in the database file, such as
+    the starting and ending index of the value.
     """
 
     start_index: int
