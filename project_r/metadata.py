@@ -231,7 +231,11 @@ class MetadataController:
         node.is_enabled = False
         self._disabled_nodes_list.insert(node)
 
-    def set(self, key: str, value_size: int) -> tuple[int, int]:
+    def update(self, key: str, value_size: int) -> None:
+        """
+        Update and return the allocated character index range in the file for the
+        value according to its size.
+        """
         if key in self._metadata.key_to_node:
             if value_size > self._metadata.key_to_node[key].available_space:
                 op_type = _OperationType.RELOCATE
