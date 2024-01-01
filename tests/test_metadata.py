@@ -7,20 +7,21 @@ class TestMetadataDisabledNodes(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.disabled_nodes_list = _DisabledNodesList()
 
-        # Available sizes: 1, 2, 2, 3, 5, 10
-        nodes = [
-            _ValueNode(0, 2, 0, None, None),
-            _ValueNode(3, 4, 0, None, None),
-            _ValueNode(5, 7, 0, None, None),
-            _ValueNode(8, 10, 0, None, None),
-            _ValueNode(11, 16, 0, None, None),
-            _ValueNode(17, 27, 0, None, None),
+        # Available space: 3, 1, 2, 1, 5, 10
+        self.nodes = nodes = [
+            _ValueNode(0, 2, 0, None, None, False),  #  3
+            _ValueNode(3, 4, 0, None, None, False),  #  1
+            _ValueNode(5, 7, 0, None, None, False),  #  2
+            _ValueNode(8, 10, 0, None, None, False),  #  2
+            _ValueNode(11, 16, 0, None, None, False),  #  5
+            _ValueNode(17, 27, 0, None, None, False),  # 10
         ]
 
+        # Doesn't trigger defragmentation, since they're not linked yet
         for node in nodes:
             self.disabled_nodes_list.insert(node)
 
-        # Link nodes(used to test node removal)
+        # Link nodes(used to test node removal and defragmentation)
         nodes[0].next_node = nodes[1]
         nodes[-1].previous_node = nodes[-2]
         for i, node in enumerate(nodes[1:-1], start=1):
@@ -94,6 +95,60 @@ class TestMetadataDisabledNodes(unittest.IsolatedAsyncioTestCase):
         ]
         # [2, 2, 5, 10] => [2, 2, 5]
         self.assertEqual(available_space_list, [2, 2, 5])
+
+    async def test_node_defragmentation_middle(self):
+        """
+        Tests defragmentation for an element inserted in the middle.
+
+        Defragmentation means that inserting nodes with nearby disabled nodes makes them all combine into the new node,
+        freeing up more space for allocating nodes.
+        """
+        # Since nodes are linked by the time this insertion runs, it'll trigger defragmentation
+        node_1 = self.disabled_nodes_list.disabled_nodes[1]
+        node = _ValueNode(4, 4, 0, node_1, node_1.next_node, False)
+        node_1.next_node.previous_node = node
+        node_1.next_node = node
+        self.disabled_nodes_list.insert(node)
+
+        # Defragmentation is expected to turn the whole list into the a new node
+        self.assertEqual(len(self.disabled_nodes_list.disabled_nodes), 1)
+        combined_node = self.disabled_nodes_list.disabled_nodes[0]
+        self.assertEqual(combined_node.start_index, 0)
+        self.assertEqual(combined_node.end_index, 27)
+        self.assertEqual(combined_node.available_space, 28)
+
+    async def test_node_defragmentation_end(self):
+        """
+        Tests defragmentation for an element inserted at the end.
+        """
+        # Since nodes are linked by the time this insertion runs, it'll trigger defragmentation
+        last_node = self.disabled_nodes_list.disabled_nodes[-1]
+        node = _ValueNode(28, 48, 0, last_node, None, False)
+        self.disabled_nodes_list.insert(node)
+
+        # Defragmentation is expected to turn the whole list into the a new node
+        self.assertEqual(len(self.disabled_nodes_list.disabled_nodes), 1)
+        combined_node = self.disabled_nodes_list.disabled_nodes[0]
+        self.assertEqual(combined_node.start_index, 0)
+        self.assertEqual(combined_node.end_index, 48)
+        self.assertEqual(combined_node.available_space, 49)
+
+    async def test_node_defragmentation_start(self):
+        """
+        Tests defragmentation for an element inserted at the start.
+        """
+        # Since nodes are linked by the time this insertion runs, it'll trigger defragmentation
+        first_node = self.nodes[0]
+        node = _ValueNode(0, 0, 0, None, first_node, False)
+        first_node.previous_node = node
+        self.disabled_nodes_list.insert(node)
+
+        # Defragmentation is expected to turn the whole list into the a new node
+        self.assertEqual(len(self.disabled_nodes_list.disabled_nodes), 1)
+        combined_node = self.disabled_nodes_list.disabled_nodes[0]
+        self.assertEqual(combined_node.start_index, 0)
+        self.assertEqual(combined_node.end_index, 27)
+        self.assertEqual(combined_node.available_space, 28)
 
 
 if __name__ == "__main__":

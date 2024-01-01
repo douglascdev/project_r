@@ -1,5 +1,5 @@
 import json
-from bisect import bisect_left, insort_left
+from bisect import bisect_left
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -24,7 +24,11 @@ class _ValueNode:
         """
         Returns the maximum space the node value can take.
         """
-        return self.end_index - self.start_index + (1 if self.start_index == 0 else 0)
+        return (
+            self.end_index
+            - self.start_index
+            + (1 if self.start_index == 0 != self.end_index else 0)
+        )
 
 
 class _DisabledNodesList:
@@ -39,6 +43,22 @@ class _DisabledNodesList:
         return bisect_left(
             self.disabled_nodes, min_size, key=lambda node: node.available_space
         )
+
+    def _index(self, node: _ValueNode) -> int | None:
+        index_and_node = self.find_node(node.available_space)
+        if index_and_node is None:
+            return None
+
+        i, found_node = index_and_node
+        while (
+            found_node not in (None, node)
+            and found_node.available_space == node.available_space
+            and i < len(self.disabled_nodes)
+        ):
+            i += 1
+            found_node = self.disabled_nodes[i]
+
+        return i if found_node is node else None
 
     def find_node(self, min_size: int) -> tuple[int, _ValueNode] | None:
         """
@@ -57,7 +77,57 @@ class _DisabledNodesList:
         return optimal_node_index, self.disabled_nodes[optimal_node_index]
 
     def insert(self, node: _ValueNode) -> None:
-        insort_left(self.disabled_nodes, node, key=lambda n: n.available_space)
+        """
+        Insert node into disabled nodes list.
+
+        Any nodes to its left or right that are also disabled get combined into it.
+        """
+        index = self._bisect(node.available_space)
+        self.disabled_nodes.insert(index, node)
+
+        left_edge = right_edge = node
+        combinable_node_indexes = set()
+
+        # Traverse nodes left and right to find nodes that can be combined
+        while (
+            left_edge.previous_node is not None
+            and left_edge.previous_node.is_enabled is False
+        ):
+            left_edge = left_edge.previous_node
+            found_node_i = self._index(left_edge)
+            if found_node_i is not None:
+                combinable_node_indexes.add(found_node_i)
+
+        while (
+            right_edge.next_node is not None
+            and right_edge.next_node.is_enabled is False
+        ):
+            right_edge = right_edge.next_node
+            found_node_i = self._index(right_edge)
+            if found_node_i is not None:
+                combinable_node_indexes.add(found_node_i)
+
+        # Fix links to match the new status of one combined node
+        if left_edge is not node:
+            if left_edge.previous_node:
+                left_edge.previous_node.next_node = node
+
+            node.previous_node = left_edge.previous_node
+            node.start_index = left_edge.start_index
+
+        if right_edge is not node:
+            if right_edge.next_node:
+                right_edge.next_node.previous_node = node
+
+            node.next_node = right_edge.next_node
+            node.end_index = right_edge.end_index
+
+        # Remove combined nodes from disabled nodes list
+        self.disabled_nodes = [
+            node
+            for i, node in enumerate(self.disabled_nodes)
+            if i not in combinable_node_indexes
+        ]
 
     def remove(self, node: _ValueNode) -> None:
         """
@@ -69,21 +139,12 @@ class _DisabledNodesList:
         find the leftmost node that would have the same available space, then use
         the next pointer to traverse the links until we find the correct node to remove.
         """
-        initial_index = self._bisect(node.available_space)
-        num_nodes_traversed = 0
+        node_index = self._index(node)
 
-        current_node = self.disabled_nodes[initial_index]
-        while (
-            current_node not in (None, node)
-            and current_node.available_space == node.available_space
-        ):
-            current_node = current_node.next_node
-            num_nodes_traversed += 1
-
-        if current_node is node:
-            self.disabled_nodes.pop(initial_index + num_nodes_traversed)
-        else:
+        if node_index is None:
             raise ValueError(f"Node {node} not in disabled nodes.")
+
+        self.disabled_nodes.pop(node_index)
 
     def pop(self, index: int) -> _ValueNode:
         return self.disabled_nodes.pop(index)
@@ -165,12 +226,10 @@ class MetadataController:
 
     def _disable_node(self, node: _ValueNode):
         """
-        Disable node and try to traverse the list of disabled nodes to its left and right,
-        turning the sequence of disabled nodes into a new single node.
+        Disable node. Combine with any adjacent disabled nodes.
         """
         node.is_enabled = False
         self._disabled_nodes_list.insert(node)
-        # TODO traversal
 
     def set(self, key: str, value_size: int) -> tuple[int, int]:
         if key in self._metadata.key_to_node:
