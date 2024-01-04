@@ -233,7 +233,7 @@ class MetadataController:
 
     def update(self, key: str, value_size: int) -> None:
         """
-        Update and return the allocated character index range in the file for the
+        Update the allocated character index range in the file for the
         value according to its size.
         """
         if key in self._metadata.key_to_node:
