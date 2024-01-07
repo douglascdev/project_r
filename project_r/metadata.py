@@ -231,7 +231,7 @@ class MetadataController:
         node.is_enabled = False
         self._disabled_nodes_list.insert(node)
 
-    def update(self, key: str, value_size: int) -> None:
+    def set(self, key: str, value_size: int) -> None:
         """
         Update the allocated character index range in the file for the
         value according to its size.
