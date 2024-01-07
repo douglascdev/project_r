@@ -1,6 +1,6 @@
 import json
 import logging
-from io import TextIOBase
+from io import StringIO, TextIOBase
 from pathlib import Path
 from typing import Any
 
@@ -15,30 +15,32 @@ class PersistentDict:
     """
     Persistent async key-value storage.
 
-    :param file: can be a Path to a database file or a TextIOBase if you don't want to use a file,
+    :param values_file: file where values are stored. This can be a Path
+    to a database file or a TextIOBase if you don't want to use a file,
     such as using a StringIO object for a memory database.
 
-    A metadata json file will be created automatically in the same directory with the same
-    name, but removing the extension and appending "_metadata.json".
+    :param metadata_file: file where metadata is stored. Same type as values_file,
+    but defaults to copying the same path as values_file with the same
+    name, but removing the extension and appending "_metadata.json", or to an
+    empty StringIO if values_file is a TextIOBase instead of a Path.
     """
 
-    def __init__(self, file: TextIOBase | Path) -> None:
-        self._rwlock = RWLock()
-        self._values_file: TextIOBase = self._get_file_object(file)
-        self._metadata = MetadataController(self._values_file)
+    def __init__(
+        self,
+        values_file: TextIOBase | Path,
+        metadata_file: TextIOBase | Path | None = None,
+    ) -> None:
+        if metadata_file is None:
+            if isinstance(values_file, Path):
+                metadata_file = values_file.with_name(
+                    values_file.name + "_metadata.json"
+                )
+            else:
+                metadata_file = StringIO("")
 
-        # TODO: Use this commented code to load the metadata json
-        # try:
-        #     self._data: dict = json.load(self._values_file)
-        # except json.JSONDecodeError:
-        #     # File is not empty, database exists but failed to load
-        #     if self._values_file.read():
-        #         raise Exception("Failed to load database.")
-        #
-        #     # File is empty so it's a new database, make an empty dict
-        #     self._data: dict = {}
-        #
-        # assert type(self._data) is dict, "Database file is not a dictionary"
+        self._metadata = MetadataController(self._get_file_object(metadata_file))
+        self._values_file: TextIOBase = self._get_file_object(values_file)
+        self._rwlock = RWLock()
 
     def _get_file_object(self, file) -> TextIOBase:
         if type(file) is Path:

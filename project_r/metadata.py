@@ -2,7 +2,7 @@ import json
 from bisect import bisect_left
 from dataclasses import dataclass
 from enum import Enum, auto
-from pathlib import Path
+from io import TextIOBase
 
 
 @dataclass
@@ -162,6 +162,19 @@ class _Metadata:
         self.disabled_nodes: list[_ValueNode] = []
         self.last_node: _ValueNode | None = None
 
+    def load(self, metadata_io: TextIOBase) -> None:
+        try:
+            data: dict = json.load(metadata_io)
+        except json.JSONDecodeError:
+            # File is not empty, database exists but failed to load
+            if metadata_io.read():
+                raise Exception("Failed to load database.")
+
+            # File is empty so it's a new database, don't have to load anything
+            return
+
+        self.__dict__.update(data)
+
     def toJSON(self) -> str:
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
@@ -178,12 +191,12 @@ class MetadataController:
     Handles operations on database metadata.
     """
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, metadata_io: TextIOBase) -> None:
         # Use same name as database file, but remove extension and add "_metadata.json"
-        self._file = Path(db_path.stem) / "_metadata.json"
+        self._metadata_io = metadata_io
 
-        # TODO: load from json
         self._metadata = _Metadata()
+        self._metadata.load(self._metadata_io)
 
         self._disabled_nodes_list = _DisabledNodesList()
 
