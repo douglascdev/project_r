@@ -13,17 +13,15 @@ __all__ = ["PersistentDict"]
 class PersistentDict:
     """
     Persistent async key-value storage.
+
+    :param file: can be a Path to a database file or a TextIOBase if you don't want to use a file,
+    such as using a StringIO object for a memory database.
+
+    A metadata json file will be created automatically in the same directory with the same
+    name, but removing the extension and appending "_metadata.json".
     """
 
     def __init__(self, file: TextIOBase | Path) -> None:
-        """
-        File can be a Path to a database file or a TextIOBase if you don't want to use a file,
-        such as using a StringIO object for a memory database.
-
-        A metadata json file will be created automatically in the same directory with the same
-        name, but removing the extension and appending "_metadata.json".
-        """
-
         self._rwlock = RWLock()
         self._file: TextIOBase = self._get_file_object(file)
 
