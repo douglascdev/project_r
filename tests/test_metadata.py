@@ -1,6 +1,8 @@
+import json
 import unittest
+from io import StringIO
 
-from project_r.metadata import _DisabledNodesList, _ValueNode
+from project_r.metadata import MetadataController, _DisabledNodesList, _ValueNode
 
 
 class TestMetadataDisabledNodes(unittest.IsolatedAsyncioTestCase):
@@ -149,6 +151,29 @@ class TestMetadataDisabledNodes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(combined_node.start_index, 0)
         self.assertEqual(combined_node.end_index, 27)
         self.assertEqual(combined_node.available_space, 28)
+
+
+class TestMetadataSerialization(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.metadata_controller = MetadataController(StringIO(""))
+        self.metadata_controller.set("key1", 3)
+        self.metadata_controller.set("key2", 10)
+        self.metadata_controller.set("key3", 20)
+        self.metadata_controller.remove("key2")
+
+    async def test_metadata_serialization(self):
+        try:
+            data = self.metadata_controller._metadata.toJSON()
+        except TypeError as e:
+            self.fail(f"Failed to serialize metadata to JSON: {e}")
+
+        try:
+            self.metadata_controller._metadata.load(StringIO(data))
+        except json.JSONDecodeError as e:
+            self.fail(f"Failed to deserialize metadata from JSON: {e}")
+
+        self.assertEqual(self.metadata_controller._metadata.file_size, 33)
+        self.assertEqual(len(self.metadata_controller._metadata.key_to_node), 2)
 
 
 if __name__ == "__main__":

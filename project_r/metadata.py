@@ -159,7 +159,7 @@ class _Metadata:
         self.file_size: int = 0
         # Maps database keys to their corresponding database nodes
         self.key_to_node: dict[str, _ValueNode] = {}
-        self.disabled_nodes: list[_ValueNode] = []
+        self.disabled_nodes_list: _DisabledNodesList = _DisabledNodesList()
         self.last_node: _ValueNode | None = None
 
     def load(self, metadata_io: TextIOBase) -> None:
@@ -198,16 +198,18 @@ class MetadataController:
         self._metadata = _Metadata()
         self._metadata.load(self._metadata_io)
 
-        self._disabled_nodes_list = _DisabledNodesList()
+        self._metadata.disabled_nodes_list = _DisabledNodesList()
 
     def _add_new_node(self, key: str, value_size: int):
         # Try allocating in a disabled node that fits the value size
         # TODO: if the disabled node has more space than needed, split it in two,
         #       creating a new disabled node with the remaining space
-        index_and_node = self._disabled_nodes_list.find_node(min_size=value_size)
+        index_and_node = self._metadata.disabled_nodes_list.find_node(
+            min_size=value_size
+        )
         if index_and_node is not None:
             index, node = index_and_node
-            self._disabled_nodes_list.pop(index)
+            self._metadata.disabled_nodes_list.pop(index)
             self._metadata.key_to_node[key] = node
             node.value_size = value_size
             node.is_enabled = True
@@ -242,7 +244,7 @@ class MetadataController:
         Disable node. Combine with any adjacent disabled nodes.
         """
         node.is_enabled = False
-        self._disabled_nodes_list.insert(node)
+        self._metadata.disabled_nodes_list.insert(node)
 
     def set(self, key: str, value_size: int) -> None:
         """
