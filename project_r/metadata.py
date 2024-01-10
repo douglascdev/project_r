@@ -272,7 +272,7 @@ class MetadataController:
         """
         Find tuple with indexes of where a value starts and ends in the file
         """
-        if node := self._metadata.key_to_node[key]:
+        if node := self._metadata.key_to_node.get(key):
             return node.start_index, node.start_index + node.value_size
         else:
             return None
